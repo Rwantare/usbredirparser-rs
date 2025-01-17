@@ -556,6 +556,13 @@ connection_incoming_cb(GSocketService    *service,
                        gpointer           user_data)
 {
     redirect *self = (redirect *) user_data;
+
+    // Check if there is already an active connection
+    if (self->connection != NULL) {
+        g_warning("Rejecting new connection: already connected to a client");
+        return G_SOURCE_REMOVE;
+    }
+
     self->connection = g_object_ref(client_connection);
 
     /* Add a GSource watch to handle polling for us and handle IO in the callback */
