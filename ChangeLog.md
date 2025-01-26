@@ -1,3 +1,9 @@
+# usbredir-0.15.0 - 27 Jan 2025
+
+- !74 usbredirect: Fix crash with multiple connections
+- !73 usbredirect: Fix win32 cross-compile warning 
+- usbredirtestclient: Fix memory leak
+
 # usbredir-0.14.0 - 29 Feb 2024
 
 - !67 usbredirect: Fix redirecting identical devices
