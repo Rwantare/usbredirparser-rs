@@ -232,3 +232,17 @@ pub unsafe extern "C" fn usbredirparser_init(
         .write_buffer
         .extend_from_slice(&caps_val.to_le_bytes());
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn usbredirparser_caps_set_cap(caps: *mut u32, cap: c_int) {
+    // We only support USB_REDIR_CAPS_SIZE = 1 (32 bits)
+    if caps.is_null() || cap < 0 || cap >= 32 {
+        return;
+    }
+
+    // SAFETY: caps is valid for at least 1 u32 (caller responsibility),
+    // and we checked cap < 32, so we access index 0.
+    unsafe {
+        *caps |= 1 << cap;
+    }
+}

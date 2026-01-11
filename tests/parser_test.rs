@@ -1,6 +1,7 @@
 use std::ffi::CString;
 use usbredirparser_rs::parser::{
-    Parser, usbredirparser, usbredirparser_create, usbredirparser_destroy, usbredirparser_init,
+    Parser, usbredirparser, usbredirparser_caps_set_cap, usbredirparser_create, usbredirparser_destroy,
+    usbredirparser_init,
 };
 use usbredirparser_rs::proto::{CapabilityFlags, ParserFlags, UsbPacketType};
 
@@ -156,5 +157,29 @@ fn test_lock_callbacks() {
 
         assert!(LOCK_ALLOCATED, "alloc_lock should have been called");
         assert!(LOCK_FREED, "free_lock should have been called");
+    }
+}
+
+#[test]
+fn test_caps_set_cap() {
+    unsafe {
+        let mut caps = [0u32; 2]; // Use 2 to verify we don't touch second one if OOB
+        
+        // Test setting a few bits
+        usbredirparser_caps_set_cap(caps.as_mut_ptr(), 2); // Bit 2
+        assert_eq!(caps[0], 1 << 2);
+
+        usbredirparser_caps_set_cap(caps.as_mut_ptr(), 7); // Bit 7
+        assert_eq!(caps[0], (1 << 2) | (1 << 7));
+        
+        // Test OOB (> 31)
+        // This should NOT affect caps[0] OR caps[1] because of strict bounds check.
+        usbredirparser_caps_set_cap(caps.as_mut_ptr(), 32); 
+        assert_eq!(caps[0], (1 << 2) | (1 << 7));
+        assert_eq!(caps[1], 0);
+
+        // Test OOB negative
+        usbredirparser_caps_set_cap(caps.as_mut_ptr(), -1);
+        assert_eq!(caps[0], (1 << 2) | (1 << 7));
     }
 }
