@@ -1,8 +1,7 @@
 use crate::proto::{
-    CapabilityFlags, ParserFlags, USB_REDIR_CAPS_SIZE, UsbPacketType, UsbRedirHeader,
-    UsbRedirHelloHeader,
+    AsBytes, CapabilityFlags, ParserFlags, UsbPacketType, UsbRedirHeader, UsbRedirHelloHeader,
 };
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{CStr, c_char, c_int, c_void};
 use std::mem;
 
 // Re-export constants if needed for the parser header, or just rely on proto header inclusion.
@@ -126,7 +125,7 @@ impl Default for Parser {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn usbredirparser_create() -> *mut usbredirparser {
     let parser = Box::new(Parser::default());
-    Box::into_raw(parser) as *mut usbredirparser
+    Box::into_raw(parser).cast::<usbredirparser>()
 }
 
 #[unsafe(no_mangle)]
@@ -136,7 +135,7 @@ pub unsafe extern "C" fn usbredirparser_destroy(parser_ptr: *mut usbredirparser)
     }
     // SAFETY: caller guarantees parser_ptr is valid, and we know it was created via Box::into_raw.
     // Reconstruct the Box to deallocate it.
-    let parser = unsafe { Box::from_raw(parser_ptr as *mut Parser) };
+    let parser = unsafe { Box::from_raw(parser_ptr.cast::<Parser>()) };
 
     // If a lock was allocated, free it.
     if let Some(free_func) = parser.interface.free_lock_func {
@@ -160,9 +159,10 @@ pub unsafe extern "C" fn usbredirparser_init(
         return;
     }
     // SAFETY: caller guarantees parser_ptr is valid.
-    let parser = unsafe { &mut *(parser_ptr as *mut Parser) };
+    let parser = unsafe { &mut *(parser_ptr.cast::<Parser>()) };
 
-    parser.flags = ParserFlags::from_bits_truncate(flags as u32) & !ParserFlags::NO_HELLO;
+    let flags = flags as u32;
+    parser.flags = ParserFlags::from_bits_truncate(flags) & !ParserFlags::NO_HELLO;
 
     // Allocate lock if supported
     if let Some(alloc_func) = parser.interface.alloc_lock_func {
@@ -170,18 +170,11 @@ pub unsafe extern "C" fn usbredirparser_init(
     }
 
     // Copy capabilities
-    let len = if caps_len > USB_REDIR_CAPS_SIZE as c_int {
-        USB_REDIR_CAPS_SIZE
-    } else {
-        caps_len as usize
-    };
-    if !caps.is_null() && len > 0 {
+    if !caps.is_null() && caps_len == 1 {
         // SAFETY: caps is valid for 1 element.
         // It has been over a decade and caps has not grown over 32bits
-        if len >= 1 {
-            let raw_caps = unsafe { *caps };
-            parser.our_caps = CapabilityFlags::from_bits_truncate(raw_caps);
-        }
+        let raw_caps = unsafe { *caps };
+        parser.our_caps = CapabilityFlags::from_bits_truncate(raw_caps);
     }
 
     // Reset internal state (similar to usbredirparser_reset in C, but manual here for now)
@@ -193,48 +186,49 @@ pub unsafe extern "C" fn usbredirparser_init(
     parser.write_buffer.clear();
 
     // Send hello if needed
-    if (flags & ParserFlags::NO_HELLO.bits() as i32) == 0 {
-        // Prepare Version String
-        let mut version_arr = [0u8; 64];
-        if !version.is_null() {
-            // SAFETY: trusting that version is a valid C string if not null.
-            unsafe {
-                let c_str = std::ffi::CStr::from_ptr(version);
-                let bytes = c_str.to_bytes();
-                let copy_len = std::cmp::min(bytes.len(), 63); // Leave one null byte
-                version_arr[..copy_len].copy_from_slice(&bytes[..copy_len]);
-            }
-        }
-
-        // Prepare Hello Header
-        let hello = UsbRedirHelloHeader {
-            version: version_arr,
-            capabilities: [],
-        };
-
-        let caps_size = USB_REDIR_CAPS_SIZE * mem::size_of::<u32>();
-        let packet_len = mem::size_of::<UsbRedirHelloHeader>() + caps_size;
-
-        // Prepare Generic Header
-        let header = UsbRedirHeader {
-            type_: UsbPacketType::Hello as u32,
-            length: packet_len as u32,
-            id: 0,
-        };
-
-        // Serialize to write buffer
-        // Header
-        parser.write_buffer.extend_from_slice(header.as_bytes());
-
-        // Hello Header
-        parser.write_buffer.extend_from_slice(hello.as_bytes());
-
-        // Caps
-        // We need to serialize our CapabilityFlags back to bytes.
-        // Since it's u32 transparent, we can write the bits directly.
-        let caps_val = parser.our_caps.bits();
-        parser
-            .write_buffer
-            .extend_from_slice(&caps_val.to_le_bytes());
+    if (flags & ParserFlags::NO_HELLO.bits()) != 0 {
+        return;
     }
+    // Prepare Version String
+    let mut version_arr = [0u8; 64];
+    if !version.is_null() {
+        // SAFETY: trusting that version is a valid C string if not null.
+        unsafe {
+            let c_str = CStr::from_ptr(version);
+            let bytes = c_str.to_bytes();
+            let copy_len = std::cmp::min(bytes.len(), 63); // Leave one null byte
+            version_arr[..copy_len].copy_from_slice(&bytes[..copy_len]);
+        }
+    }
+
+    // Prepare Hello Header
+    let hello = UsbRedirHelloHeader {
+        version: version_arr,
+        capabilities: [],
+    };
+
+    let caps_size = mem::size_of::<u32>();
+    let packet_len = mem::size_of::<UsbRedirHelloHeader>() + caps_size;
+
+    // Prepare Generic Header
+    let header = UsbRedirHeader {
+        type_: UsbPacketType::Hello as u32,
+        length: packet_len as u32,
+        id: 0,
+    };
+
+    // Serialize to write buffer
+    // Header
+    parser.write_buffer.extend_from_slice(header.as_bytes());
+
+    // Hello Header
+    parser.write_buffer.extend_from_slice(hello.as_bytes());
+
+    // Caps
+    // We need to serialize our CapabilityFlags back to bytes.
+    // Since it's u32 transparent, we can write the bits directly.
+    let caps_val = parser.our_caps.bits();
+    parser
+        .write_buffer
+        .extend_from_slice(&caps_val.to_le_bytes());
 }

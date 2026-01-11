@@ -1,20 +1,22 @@
 // Constants from usbredirproto.h
-pub const USB_REDIR_CAPS_SIZE: usize = 1;
-pub const USBREDIR_VERSION: u32 = 0x000701;
+pub const USB_REDIR_CAPS_SIZE: u32 = 1;
+pub const USBREDIR_VERSION: u32 = 0x0000_0701;
+
+use std::ptr;
 
 use bitflags::bitflags;
 
 // Constants from usbredirproto.h
 
 bitflags! {
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq)]
     pub struct ParserFlags: u32 {
         const USB_HOST = 0x01;
         const WRITE_CB_OWNS_BUFFER = 0x02;
         const NO_HELLO = 0x04;
     }
 
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq)]
     pub struct CapabilityFlags: u32 {
         /* Supports USB 3 bulk streams */
         const BULK_STREAMS = 1 << 0;
@@ -36,8 +38,9 @@ bitflags! {
 }
 
 #[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum UsbPacketType {
+    #[default]
     Hello = 0,
     DeviceConnect = 1,
     DeviceDisconnect = 2,
@@ -75,25 +78,29 @@ pub enum UsbPacketType {
     BufferedBulkPacket = 104,
 }
 
-impl Default for UsbPacketType {
-    fn default() -> Self {
-        UsbPacketType::Hello
-    }
-}
-
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum UsbEndpointType {
     Control = 0,
     Iso = 1,
     Bulk = 2,
     Interrupt = 3,
+    #[default]
     Invalid = 255,
 }
 
-impl Default for UsbEndpointType {
-    fn default() -> Self {
-        UsbEndpointType::Invalid
+/// Trait for types that can be safely viewed as bytes.
+/// # Safety
+/// Implementor must ensure the type has no padding or invalid bit patterns.
+pub unsafe trait AsBytes: Sized {
+    fn as_bytes(&self) -> &[u8] {
+        // SAFETY: The trait helper guarantees self is valid for byte viewing.
+        unsafe {
+            std::slice::from_raw_parts(
+                (ptr::from_ref(self)).cast::<u8>(),
+                std::mem::size_of::<Self>(),
+            )
+        }
     }
 }
 
@@ -105,20 +112,7 @@ pub struct UsbRedirHeader {
     pub id: u64,
 }
 
-impl UsbRedirHeader {
-    pub fn as_bytes(&self) -> &[u8] {
-        // SAFETY: UsbRedirHeader is #[repr(C, packed)], making it a POD (Plain Old Data) type.
-        // It contains only u32/u64 fields which are valid for any bit pattern.
-        // We cast the pointer to *const u8 and create a slice of size_of::<Self>(),
-        // which gives us a direct view of the underlying bytes.
-        unsafe {
-            std::slice::from_raw_parts(
-                (self as *const Self) as *const u8,
-                std::mem::size_of::<Self>(),
-            )
-        }
-    }
-}
+unsafe impl AsBytes for UsbRedirHeader {}
 
 #[repr(C, packed)]
 pub struct UsbRedirHelloHeader {
@@ -126,16 +120,4 @@ pub struct UsbRedirHelloHeader {
     pub capabilities: [u32; 0], // Flexible array member
 }
 
-impl UsbRedirHelloHeader {
-    pub fn as_bytes(&self) -> &[u8] {
-        // SAFETY: UsbRedirHelloHeader is #[repr(C, packed)] and contains only POD types ([u8; 64]).
-        // The flexible array member `capabilities` has size 0 in the struct layout itself.
-        // Casting to bytes is safe for the fixed-size portion.
-        unsafe {
-            std::slice::from_raw_parts(
-                (self as *const Self) as *const u8,
-                std::mem::size_of::<Self>(),
-            )
-        }
-    }
-}
+unsafe impl AsBytes for UsbRedirHelloHeader {}

@@ -3,7 +3,11 @@ extern crate cbindgen;
 use std::env;
 
 fn main() {
-    let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let Ok(crate_dir) = env::var("CARGO_MANIFEST_DIR") else {
+        // Fallback or exit gracefully
+        println!("cargo:warning=CARGO_MANIFEST_DIR is not set");
+        return;
+    };
 
     // Re-run build if source files change
     println!("cargo:rerun-if-changed=src/lib.rs");
@@ -11,7 +15,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/proto.rs");
 
     // Generate C header
-    cbindgen::Builder::new()
+    match cbindgen::Builder::new()
         .with_crate(crate_dir)
         .with_language(cbindgen::Language::C)
         .with_include_guard("USBREDIRPARSER_H")
@@ -20,6 +24,12 @@ fn main() {
         .with_parse_deps(true)
         .with_parse_include(&["usbredirparser-rs"])
         .generate()
-        .expect("Unable to generate bindings")
-        .write_to_file("include/usbredirparser.h");
+    {
+        Ok(bindings) => {
+            bindings.write_to_file("include/usbredirparser.h");
+        }
+        Err(e) => {
+            println!("cargo:warning=Unable to generate bindings: {e}");
+        }
+    }
 }
