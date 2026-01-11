@@ -1,8 +1,8 @@
 use std::ffi::CString;
-use usbredir_safe::parser::{
+use usbredirparser_rs::parser::{
     Parser, usbredirparser, usbredirparser_create, usbredirparser_destroy, usbredirparser_init,
 };
-use usbredir_safe::proto::{CapabilityFlags, ParserFlags, UsbPacketType};
+use usbredirparser_rs::proto::{CapabilityFlags, ParserFlags, UsbPacketType};
 
 // Helper to access the internal Parser struct from the public opaque pointer
 unsafe fn get_parser(ptr: *mut usbredirparser) -> &'static mut Parser {
