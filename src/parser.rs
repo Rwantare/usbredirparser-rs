@@ -79,7 +79,6 @@ impl Default for usbredirparser {
 
 // Internal parser struct (mimics usbredirparser_priv)
 #[repr(C)]
-#[repr(C)]
 pub struct Parser {
     pub interface: usbredirparser, // Must be first
     pub flags: ParserFlags,
@@ -177,16 +176,13 @@ pub unsafe extern "C" fn usbredirparser_init(
         caps_len as usize
     };
     if !caps.is_null() && len > 0 {
-        // SAFETY: caps is valid for len elements.
-        // We assume caps[0] matches our u32 bitflags layout since it spans the first 32 bits.
-        // If USB_REDIR_CAPS_SIZE > 1, this logic would need to change to handle multiple u32s.
+        // SAFETY: caps is valid for 1 element.
+        // It has been over a decade and caps has not grown over 32bits
         if len >= 1 {
             let raw_caps = unsafe { *caps };
             parser.our_caps = CapabilityFlags::from_bits_truncate(raw_caps);
         }
     }
-
-    // Verify caps logic (simplified for now)
 
     // Reset internal state (similar to usbredirparser_reset in C, but manual here for now)
     parser.header_read = 0;
@@ -195,8 +191,6 @@ pub unsafe extern "C" fn usbredirparser_init(
     parser.data_read = 0;
     parser.to_skip = 0;
     parser.write_buffer.clear();
-    // parser.data.clear(); // If we owned it, but we might want to keep allocation.
-    // For now, let's just reset read counters.
 
     // Send hello if needed
     if (flags & ParserFlags::NO_HELLO.bits() as i32) == 0 {
