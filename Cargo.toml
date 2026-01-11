@@ -1,0 +1,13 @@
+[package]
+name = "usbredir-safe"
+version = "0.1.0"
+edition = "2024"
+authors = ["Titus Rwantare <titusr@google.com>"]
+description = "Rust port of usbredirparser"
+license = "LGPL-2.1-or-later"
+
+[dependencies]
+bitflags = "2.10.0"
+
+[build-dependencies]
+cbindgen = "0.29.2"
